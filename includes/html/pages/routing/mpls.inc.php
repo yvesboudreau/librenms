@@ -199,12 +199,12 @@ if ($vars['view'] == 'paths') {
         }
 
         $host = @dbFetchRow('SELECT * FROM `ipv4_addresses` AS A, `ports` AS I, `devices` AS D WHERE A.ipv4_address = ? AND I.port_id = A.port_id AND D.device_id = I.device_id', [$path['mplsLspPathFailNodeAddr']]);
-        $destination = $lsp['mplsLspPathFailNodeAddr'];
+        $destination = $path['mplsLspPathFailNodeAddr'];
         if (is_array($host)) {
             $destination = generate_device_link($host, 0, array('tab' => 'routing', 'proto' => 'mpls'));
         }
         echo "<tr bgcolor=$bg_colour>
-            <td>" . generate_device_link($device, 0, array('tab' => 'routing', 'proto' => 'mpls')) . '</td>
+            <td>" . generate_device_link($device, 0, array('tab' => 'routing', 'proto' => 'mpls', 'view' => 'paths')) . '</td>
             <td>' . $path['mplsLspName'] . '</td>
             <td>' . $path['path_oid'] . '</td>
             <td>' . $path['mplsLspPathType'] . '</td>
@@ -269,7 +269,7 @@ if ($vars['view'] == 'sdps') {
             $destination = generate_device_link($host, 0, array('tab' => 'routing', 'proto' => 'mpls'));
         }
         echo "<tr bgcolor=$bg_colour>
-            <td>" . generate_device_link($device, 0, array('tab' => 'routing', 'proto' => 'mpls')) . '</td>
+            <td>" . generate_device_link($device, 0, array('tab' => 'routing', 'proto' => 'mpls', 'view' => 'sdps')) . '</td>
             <td>' . $sdp['sdp_oid'] . '</td>
             <td>' . $destination . '</td>
             <td>' . $sdp['sdpDelivery'] . '</td>
@@ -290,6 +290,7 @@ if ($vars['view'] == 'sdps') {
 
 if ($vars['view'] == 'sdpbinds') {
     echo '<tr><th><a title="Device">Device</a></th>
+        <th><a title="The value of this object specifies the Service identifier. This value should be unique within the service domain">Service Id</a></th>
         <th><a title="SDP Binding identifier. SDP identifier : Service identifier">SDP Bind Id</a></th>
         <th><a title="This object specifies whether this Service SDP binding is a spoke or a mesh.">Bind Type</a></th>
         <th><a title="The value of VC Type is an enumerated integer that specifies the type of virtual circuit (VC) associated with the SDP binding">VC Type</a></th>
@@ -315,7 +316,7 @@ sapDown: The SAP associated with the service is down.">Oper State</a></th>
 
     $i = 0;
 
-    foreach (dbFetchRows('SELECT * FROM `mpls_sdp_binds` ORDER BY `sdp_oid`, `svc_oid`') as $sdpbind) {
+    foreach (dbFetchRows('SELECT b.*, s.svc_oid AS svcId FROM `mpls_sdp_binds` AS b LEFT JOIN `mpls_services` AS s ON `b`.`svc_id` = `s`.`svc_id` ORDER BY `sdp_oid`, `svc_oid`') as $sdpbind) {
         $device = device_by_id_cache($sdpbind['device_id']);
         if (!is_integer($i / 2)) {
             $bg_colour = \LibreNMS\Config::get('list_colour.even');
@@ -336,7 +337,8 @@ sapDown: The SAP associated with the service is down.">Oper State</a></th>
         }
 
         echo "<tr bgcolor=$bg_colour>
-            <td>" . generate_device_link($device, 0, array('tab' => 'routing', 'proto' => 'mpls')) . '</td>
+            <td>" . generate_device_link($device, 0, array('tab' => 'routing', 'proto' => 'mpls', 'view' => 'sdpbinds')) . '</td>
+            <td>' . $sdpbind['svcId'] . '</td>
             <td>' . $sdpbind['sdp_oid'] . ':' . $sdpbind['svc_oid'] . '</td>
             <td>' . $sdpbind['sdpBindType'] . '</td>
             <td>' . $sdpbind['sdpBindVcType'] . '</td>
@@ -403,7 +405,7 @@ vprn services are up when the service is administratively up however routing fun
         }
 
         echo "<tr bgcolor=$bg_colour>
-            <td>" . generate_device_link($device, 0, array('tab' => 'routing', 'proto' => 'mpls')) . '</td>
+            <td>" . generate_device_link($device, 0, array('tab' => 'routing', 'proto' => 'mpls', 'view' => 'services')) . '</td>
             <td>' . $svc['svc_oid'] . '</td>
             <td>' . $svc['svcType'] . '</td>
             <td>' . $svc['svcCustId'] . '</td>
@@ -466,7 +468,7 @@ if ($vars['view'] == 'saps') {
         }
 
         echo "<tr bgcolor=$bg_colour>
-            <td>" . generate_device_link($device, 0, array('tab' => 'routing', 'proto' => 'mpls')) . '</td>
+            <td>" . generate_device_link($device, 0, array('tab' => 'routing', 'proto' => 'mpls', 'view' => 'saps')) . '</td>
             <td>' . $sap['svc_oid'] . '</td>
             <td>' . generate_port_link($port) . '</td>
             <td>' . $sap['sapEncapValue'] . '</td>

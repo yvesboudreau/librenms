@@ -27,7 +27,7 @@
         <template v-slot:header>
             <form class="form-inline" @submit.prevent>
                 <div class="input-group">
-                    <input id="settings-search" type="search" class="form-control" placeholder="Filter Settings" v-model.trim="search_phrase">
+                    <input id="settings-search" type="search" class="form-control" :placeholder="$t('Filter Settings')" v-model.trim="search_phrase">
                 </div>
             </form>
         </template>
@@ -60,7 +60,8 @@
         props: {
             prefix: String,
             initialTab: {type: String, default: 'alerting'},
-            initialSection: String
+            initialSection: String,
+            tabs: {type: Array}
         },
         data() {
             return {
@@ -99,9 +100,6 @@
             handleBack(event) {
                 [this.tab, this.section] = event.state.split('/');
             },
-            loadData(response) {
-                this.settings = response.data;
-            },
             updateSetting(name, value) {
                 this.$set(this.settings[name], 'value', value)
             },
@@ -112,11 +110,23 @@
                     return true;
                 }
 
-                switch (setting.when.operator) {
+                if (setting.when.hasOwnProperty('and')) {
+                    return setting.when.and.reduce((result, logic) => this.checkLogic(logic) && result, true)
+                } else if (setting.when.hasOwnProperty('or')) {
+                    return setting.when.or.reduce((result, logic) => this.checkLogic(logic) || result, false)
+                }
+
+                return this.checkLogic(setting.when);
+            },
+            translatedCompare(prefix, a, b) {
+                return this.$t(prefix + a).localeCompare(this.$t(prefix + b))
+            },
+            checkLogic(logic) {
+                switch (logic.operator) {
                     case 'equals':
-                        return this.settings[setting.when.setting].value === setting.when.value;
+                        return this.settings[logic.setting].value === logic.value;
                     case 'in':
-                        return setting.when.value.includes(this.settings[setting.when.setting].value);
+                        return logic.value.includes(this.settings[logic.setting].value);
                     default:
                         return true;
                 }
@@ -128,34 +138,47 @@
         },
         computed: {
             groups() {
-                // populate layout data
+                if (_.isEmpty(this.settings)) {
+                    let sorted_tabs = {};
+                    this.tabs.sort((a, b) => this.translatedCompare('settings.groups.', a, b)).forEach(function (tab) {
+                        sorted_tabs[tab] = [];
+                    });
+
+                    return sorted_tabs;
+                }
+
+                // group data
                 let groups = {};
                 for (const key of Object.keys(this.settings)) {
                     let setting = this.settings[key];
-
                     // filter
                     if (!setting.name.includes(this.search_phrase)) {
                         continue
                     }
-
                     if (setting.group) {
                         if (!(setting.group in groups)) {
                             groups[setting.group] = {};
                         }
-
                         if (setting.section) {
                             if (!(setting.section in groups[setting.group])) {
                                 groups[setting.group][setting.section] = [];
                             }
 
-                            // insert based on order
-                            groups[setting.group][setting.section].splice(setting.order, 0, setting.name);
+                            groups[setting.group][setting.section].push(setting);
                         }
                     }
                 }
 
                 // sort groups
-                return Object.keys(groups).sort().reduce((a, c) => (a[c] = groups[c], a), {});
+                let sorted = {};
+                Object.keys(groups).sort((a, b) => this.translatedCompare('settings.groups.', a, b)).forEach(group_key => {
+                    sorted[group_key] = {};
+                    Object.keys(groups[group_key]).sort((a, b) => this.translatedCompare('settings.sections.' + group_key + '.', a , b)).forEach(section_key => {
+                        sorted[group_key][section_key] = _.sortBy(groups[group_key][section_key], 'order').map(a => a.name);
+                    });
+                });
+
+                return sorted;
             }
         }
     }

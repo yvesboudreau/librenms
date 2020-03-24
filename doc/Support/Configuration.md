@@ -372,7 +372,7 @@ $config['device_traffic_iftype'][] = '/loopback/';
 ```
 
 Interface types that aren't graphed in the WebUI. The default array
-contains more items, please see includes/defaults.inc.php for the full list.
+contains more items, please see misc/config_definitions.json for the full list.
 
 ```php
 $config['enable_clear_discovery'] = 1;
@@ -459,12 +459,12 @@ Default SNMP options including retry and timeout settings and also
 default version and port.
 
 ```php
-$config['snmp']['timeout'] = 1;            				# timeout in seconds
-$config['snmp']['retries'] = 5;            				# how many times to retry the query
-$config['snmp']['transports'] = array('udp', 'udp6', 'tcp', 'tcp6');	# Transports to use
-$config['snmp']['version'] = ['v2c', 'v3', 'v1'];         		# Default versions to use
-$config['snmp']['port'] = 161;						# Default port
-$config['snmp']['exec_timeout'] = 1200;					# execution time limit in seconds
+$config['snmp']['timeout'] = 1;                         # timeout in seconds
+$config['snmp']['retries'] = 5;                         # how many times to retry the query
+$config['snmp']['transports'] = array('udp', 'udp6', 'tcp', 'tcp6');    # Transports to use
+$config['snmp']['version'] = ['v2c', 'v3', 'v1'];               # Default versions to use
+$config['snmp']['port'] = 161;                      # Default port
+$config['snmp']['exec_timeout'] = 1200;                 # execution time limit in seconds
 ```
 
 >NOTE: `timeout` is the time to wait for an answer and `exec_timeout`
@@ -476,6 +476,7 @@ with `[1]`, `[2]`, `[3]`, etc.
 ```php
 $config['snmp']['community'][0] = "public";
 ```
+>NOTE: This list of SNMP communities is used for auto discovery, and as a default set for any manually added device.
 
 The default v3 snmp details to use, you can expand this array with
 `[1]`, `[2]`, `[3]`, etc.
@@ -649,17 +650,40 @@ you don't need to configure full location within snmp.
 
 # Interfaces to be ignored
 
+Interfaces can be automatically ignored during discovery by modifying 
+bad_if\* entries in a default array, unsetting a default array and 
+customizing it, or creating an OS specific array. The preferred method 
+for ignoring interfaces is to use an OS specific array. The default 
+arrays can be found in misc/config_definitions.json. OS specific 
+definitions (includes/definitions/_specific_os_.yaml) can contain 
+bad_if\* arrays, but should only be modified via pull-request as 
+manipulation of the definition files will block updating. 
+
 Examples:
 
+**Add entries to default arrays**
 ```php
 $config['bad_if'][] = "voip-null";
 $config['bad_iftype'][] = "voiceEncap";
 $config['bad_if_regexp'][] = '/^lo[0-9].*/';    // loopback
 ```
 
-Numerous defaults exist for this array already (see
-includes/defaults.inc.php for the full list). You can expand this list
-by continuing the array.
+**Unset and customize a default array**
+```php
+unset($config['bad_if']);
+$config['bad_if'][] = "voip-null";
+$config['bad_if'][] = "voiceEncap";
+$config['bad_if'][] = "voiceFXO";
+...
+```
+
+**Create an OS specific array**
+```php
+$config['os']['iosxe']['bad_iftype'][] = "macSecControlledIF";
+$config['os']['iosxe']['bad_iftype'][] = "macSecUncontrolledIF";
+```
+
+**Various bad_if\* selection options available**
 
 `bad_if` is matched against the ifDescr value.
 
@@ -725,26 +749,25 @@ $config['sensors']['guess_limits'] = false;
 
 It is possible to filter some sensors from the configuration:
 
-- Ignore all temperature sensors
+* Ignore all temperature sensors
 
 ```php
 $config['disabled_sensors']['current'] = true;
 ```
 
-- Filter all sensors matching regexp ``` '/PEM Iout/' ```.
+* Filter all sensors matching regexp ```'/PEM Iout/'```.
 
 ```php
 $config['disabled_sensors_regex'][] = '/PEM Iout/';
 ```
 
-- Filter all 'current' sensors for Operating System 'vrp'.
+* Filter all 'current' sensors for Operating System 'vrp'.
 
 ```php
 $config['os']['vrp']['disabled_sensors']['current'] = true;
 ```
 
-- Filter all sensors matching regexp ``` '/PEM Iout/' ``` for 
-Operating System iosxe.
+* Filter all sensors matching regexp ```'/PEM Iout/'``` for Operating System iosxe.
 
 ```php
 $config['os']['iosxe']['disabled_sensors_regex'][] = '/PEM Iout/';

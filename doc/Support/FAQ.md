@@ -30,7 +30,7 @@ path: blob/master/doc/
 - [Why is my EdgeRouter device not detected?](#faq25)
 - [Why are some of my disks not showing?](#faq26)
 - [Why are my disks reporting an incorrect size?](#faq27)
-- [What is the Difference between Disable Device and Ignore a Device?](#faq28)
+- [What does mean \"ignore alert tag\" on device, component, service and port?](#faq28)
 - [Why can't Normal and Global View users see Oxidized?](#faq29)
 - [What is the Demo User for?](#faq30)
 - [Why does modifying 'Default Alert Template' fail?](#faq31)
@@ -41,6 +41,7 @@ path: blob/master/doc/
 - [My alerts aren't being delivered on time](#my-alerts-aren't-being-delivered-on-time)
 - [My alert templates stopped working](#my-alert-templates-stopped-working)
 - [How do I use trend prediction in graphs](#how-do-i-use-trend-prediction-in-graphs)
+- [How do I move only the DB to another server](#move-db-to-another-server)
 
 # Developing
 
@@ -314,7 +315,7 @@ architecture then the following steps should be all that's needed:
 - Stop cron by commenting out all lines in `/etc/cron.d/librenms`
 - Dump the MySQL database `librenms` from your old server (`mysqldump
   librenms -u root -p > librenms.sql`)...
-- and import it into your new server (`mysql -u root -p < librenms.sql`).
+- and import it into your new server (`mysql -u root -p librenms < librenms.sql`).
 - Copy the `rrd/` folder to the new server.
 - Copy the `config.php` file to the new server.
 - Check for modified files (eg specific os, ...) with `git status` and 
@@ -354,7 +355,7 @@ Or
 
 Restart snmpd and LibreNMS should populate the additional disk after a fresh discovery.
 
-#### <a name="faq27"> Why are my disks reporting an incorrect size?</a>
+### <a name="faq27"> Why are my disks reporting an incorrect size?</a>
 
 There is a known issue for net-snmp, which causes it to report
 incorrect disk size and disk usage when the size of the disk (or raid)
@@ -366,10 +367,12 @@ adding to /etc/snmp/snmpd.conf :
 
 `realStorageUnits 0`
 
-## <a name="faq28"> What is the Difference between Disable Device and Ignore a Device?</a>
+## <a name="faq28"> What does mean \"ignore alert tag\" on device, component, service and port?</a>
 
-- Disable stops polling.
-- Ignore disables alerting.
+Tag device, component, service and port to ignore alerts. Alert checks will still run.
+However, ignore tag can be read in alert rules. For example on device, if `devices.ignore = 0` 
+or `macros.device = 1` condition is is set and ignore alert tag is on,
+the alert rule won't match. The alert rule is ignored.
 
 ## <a name="faq8"> How do I add support for a new OS?</a>
 
@@ -493,12 +496,12 @@ whilst you are still in it, do the following:
 git pull f0o issue-1337
 ```
 
-## <a name="faq29"> Why can't Normal and Global View users see Oxidized?</a> 
+## <a name="faq29"> Why can't Normal and Global View users see Oxidized?</a>
 
 Configs can often contain sensitive data. Because of that only global
 admins can see configs.
 
-## <a name="faq30"> What is the Demo User for?</a> 
+## <a name="faq30"> What is the Demo User for?</a>
 
 Demo users allow full access except adding/editing users and deleting
 devices and can't change passwords.
@@ -512,7 +515,7 @@ this from the LibreNMS directory:
 php artisan db:seed --class=DefaultAlertTemplateSeeder
 ```
 
-## <a name="faq32"> Why would alert un-mute itself?</a> 
+## <a name="faq32"> Why would alert un-mute itself?</a>
 
 If alert un-mutes itself then it most likely means that the alert
 cleared and is then triggered again. Please review eventlog as it will
@@ -580,14 +583,36 @@ this new syntax (including the titles).
 
 ## <a name='how-do-i-use-trend-prediction-in-graphs'>How do I use trend prediction in graphs</a>
 
-As of [Ver. 1.55](https://community.librenms.org/t/v1-55-release-changelog-august-2019/9428) a new feature has been added where you can view a simple linear prediction in port graphs. 
+As of [Ver. 1.55](https://community.librenms.org/t/v1-55-release-changelog-august-2019/9428) a new feature has been added where you can view a simple linear prediction in port graphs.
 
 > It doesn't work on non-port graphs or consolidated graphs at the time this FAQ entry was written.
 
 To view a prediction:
+
 - Click on any `port` graph of any network device
-- Select a `From` date to your liking (not earlier than the device was actually added to LNMS), and then select a future date in the `To` field. 
+- Select a `From` date to your liking (not earlier than the device was actually added to LNMS), and then select a future date in the `To` field.
 - Click update
 
 You should now see a linear prediction line on the graph.
+## <a name='move-db-to-another-server'>How do I move only the DB to another server?</a>
 
+There is already a reference how to move your whole LNMS installation to another server. But the following steps will help you to split up an "All-in-one" installation to one LibreNMS installation with a seperate database install. 
+*Note: This section assumes you have a MySQL/MariaDB instance
+
+- Stop the apache and mysql service in you LibreNMS installation.
+- Edit out all the cron entries in `/etc/cron.d/librenms`. 
+- Dump your `librenms`database on your current install by issuing `mysqldump librenms -u root -p > librenms.sql`.
+- Stop and disable the MySQL server on your current install.
+- On your new server make sure you create a new database with the standard install command, no need to add a user for localhost though.
+- Copy this over to your new database server and import it with `mysql -u root -p librenms < librenms.sql`.
+- Enter to mysql and add permissions with the following two commands:
+```
+GRANT ALL PRIVILEGES ON librenms.* TO 'librenms'@'IP_OF_YOUR_LNMS_SERVER' IDENTIFIED BY 'PASSWORD' WITH GRANT OPTION;
+GRANT ALL PRIVILEGES ON librenms.* TO 'librenms'@'FQDN_OF_YOUR_LNMS_SERVER' IDENTIFIED BY 'PASSWORD' WITH GRANT OPTION;
+FLUSH PRIVILEGES;
+exit;
+```
+- Enable and restart MySQL server.
+- Edit your `config.php` file to point the install to the new database server location.
+- **Very important**: On your LibreNMS server, inside your install directory is a `.env` file, in it you need to edit the `DBHOST` paramater to point to your new server location. 
+- After all this is done, enable all the cron entries again and start apache.

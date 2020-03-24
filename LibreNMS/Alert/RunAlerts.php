@@ -93,6 +93,8 @@ class RunAlerts
         $obj['ip']            = inet6_ntop($device['ip']);
         $obj['hardware']      = $device['hardware'];
         $obj['version']       = $device['version'];
+        $obj['serial']        = $device['serial'];
+        $obj['features']      = $device['features'];
         $obj['location']      = $device['location'];
         $obj['uptime']        = $device['uptime'];
         $obj['uptime_short']  = Time::formatInterval($device['uptime'], 'short');
@@ -258,10 +260,6 @@ class RunAlerts
      */
     public function issueAlert($alert)
     {
-        if (dbFetchCell('SELECT attrib_value FROM devices_attribs WHERE attrib_type = "disable_notify" && device_id = ?', array($alert['device_id'])) == '1') {
-            return true;
-        }
-
         if (Config::get('alert.fixed-contacts') == false) {
             if (empty($alert['query'])) {
                 $alert['query'] = AlertDB::genSQL($alert['rule'], $alert['builder']);

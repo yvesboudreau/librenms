@@ -26,6 +26,7 @@
 namespace LibreNMS;
 
 use App\Models\GraphType;
+use Exception;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Arr;
 use LibreNMS\DB\Eloquent;
@@ -47,16 +48,13 @@ class Config
             return self::$config;
         }
 
-        // merge all config sources together config.php > db config > config_definitions.json
-        self::$config = array_replace_recursive(
-            self::loadDefaults(),
-            Eloquent::isConnected() ? self::loadDB() : [],
-            self::loadUserConfigFile()
-        );
+        // merge all config sources together config_definitions.json > db config > config.php
+        self::loadDefaults();
+        self::loadDB();
+        self::loadUserConfigFile(self::$config);
 
         // final cleanups and validations
         self::processConfig();
-        self::populateTime();
 
         // set to global for legacy/external things (is this needed?)
         global $config;
@@ -87,39 +85,30 @@ class Config
 
     private static function loadDefaults()
     {
-        $def_config = [];
+        self::$config['install_dir'] = base_path();
         $definitions = self::getDefinitions();
 
         foreach ($definitions as $path => $def) {
             if (array_key_exists('default', $def)) {
-                Arr::set($def_config, $path, $def['default']);
+                Arr::set(self::$config, $path, $def['default']);
             }
         }
 
         // load macros from json
         $macros = json_decode(file_get_contents(base_path('misc/macros.json')), true);
-        Arr::set($def_config, 'alert.macros.rule', $macros);
+        Arr::set(self::$config, 'alert.macros.rule', $macros);
 
-        self::processDefaults($def_config);
-
-        return $def_config;
+        self::processDefaults();
     }
 
     /**
      * Load the user config from config.php
-     *
-     * @return array
+     * @param array $config (this should be self::$config)
      */
-    private static function loadUserConfigFile()
+    private static function loadUserConfigFile(&$config)
     {
-        $config = [];
-
-        $config['install_dir'] = base_path();
-
         // Load user config file
         @include base_path('config.php');
-
-        return $config;
     }
 
 
@@ -259,33 +248,16 @@ class Config
     public static function persist($key, $value)
     {
         try {
-            if (is_array($value)) {
-                // get all children
-                $children = \App\Models\Config::query()->where('config_name', 'like', "$key.%")->pluck('config_value', 'config_name');
-
-                // flatten an array and set each
-                foreach (Arr::dot($value, "$key.") as $key => $value) {
-                    if ($children->get($key) !== $value) {
-                        \App\Models\Config::updateOrCreate(['config_name' => $key], [
-                            'config_name' => $key,
-                            'config_value' => $value,
-                        ]);
-                    }
-                    Arr::set(self::$config, $key, $value);
-                    $children->forget($key);
-                }
-
-                // delete any non-existent children
-                \App\Models\Config::query()->whereIn('config_name', $children)->delete();
-            } else {
                 \App\Models\Config::updateOrCreate(['config_name' => $key], [
                     'config_name' => $key,
                     'config_value' => $value,
                 ]);
                 Arr::set(self::$config, $key, $value);
-            }
+
+                // delete any children (there should not be any unless it is legacy)
+                \App\Models\Config::query()->where('config_name', 'like', "$key.%")->delete();
             return true;
-        } catch (QueryException $e) {
+        } catch (Exception $e) {
             if (class_exists(Log::class)) {
                 Log::error($e);
             }
@@ -309,7 +281,7 @@ class Config
         self::forget($key);
         try {
             return \App\Models\Config::withChildren($key)->delete();
-        } catch (\Exception $e) {
+        } catch (Exception $e) {
             return false;
         }
     }
@@ -358,21 +330,21 @@ class Config
      */
     private static function loadDB()
     {
-        $db_config = [];
+        if (!Eloquent::isConnected()) {
+            return;
+        }
 
         try {
             \App\Models\Config::get(['config_name', 'config_value'])
-                ->each(function ($item) use (&$db_config) {
-                    Arr::set($db_config, $item->config_name, $item->config_value);
+                ->each(function ($item) {
+                    Arr::set(self::$config, $item->config_name, $item->config_value);
                 });
         } catch (QueryException $e) {
             // possibly table config doesn't exist yet
         }
 
         // load graph types from the database
-        self::loadGraphsFromDb($db_config);
-
-        return $db_config;
+        self::loadGraphsFromDb(self::$config);
     }
 
     private static function loadGraphsFromDb(&$config)
@@ -403,32 +375,27 @@ class Config
 
     /**
      * Handle defaults that are set programmatically
-     *
-     * @param array $def_config
-     * @return array
      */
-    private static function processDefaults(&$def_config)
+    private static function processDefaults()
     {
-        Arr::set($def_config, 'log_dir', base_path('logs'));
-        Arr::set($def_config, 'distributed_poller_name', php_uname('n'));
+        Arr::set(self::$config, 'log_dir', base_path('logs'));
+        Arr::set(self::$config, 'distributed_poller_name', php_uname('n'));
 
          // set base_url from access URL
         if (isset($_SERVER['SERVER_NAME']) && isset($_SERVER['SERVER_PORT'])) {
             $port = $_SERVER['SERVER_PORT'] != 80 ? ':' . $_SERVER['SERVER_PORT'] : '';
             // handle literal IPv6
             $server = str_contains($_SERVER['SERVER_NAME'], ':') ? "[{$_SERVER['SERVER_NAME']}]" : $_SERVER['SERVER_NAME'];
-            Arr::set($def_config, 'base_url', "http://$server$port/");
+            Arr::set(self::$config, 'base_url', "http://$server$port/");
         }
 
         // graph color copying
-        Arr::set($def_config, 'graph_colours.mega', array_merge(
-            (array)Arr::get($def_config, 'graph_colours.psychedelic', []),
-            (array)Arr::get($def_config, 'graph_colours.manycolours', []),
-            (array)Arr::get($def_config, 'graph_colours.default', []),
-            (array)Arr::get($def_config, 'graph_colours.mixed', [])
+        Arr::set(self::$config, 'graph_colours.mega', array_merge(
+            (array)Arr::get(self::$config, 'graph_colours.psychedelic', []),
+            (array)Arr::get(self::$config, 'graph_colours.manycolours', []),
+            (array)Arr::get(self::$config, 'graph_colours.default', []),
+            (array)Arr::get(self::$config, 'graph_colours.mixed', [])
         ));
-
-        return $def_config;
     }
 
     /**
@@ -441,7 +408,6 @@ class Config
         // If we're on SSL, let's properly detect it
         if (isset($_SERVER['HTTPS'])) {
             self::set('base_url', preg_replace('/^http:/', 'https:', self::get('base_url')));
-            self::set('secure_cookies', true);
         }
 
         // If we're on SSL, let's properly detect it
@@ -449,15 +415,12 @@ class Config
             self::set('base_url', preg_replace('/^http:/', 'https:', self::get('base_url')));
         }
 
-        if (self::get('secure_cookies')) {
-            ini_set('session.cookie_secure', 1);
-        }
-
         if (!self::get('email_from')) {
             self::set('email_from', '"' . self::get('project_name') . '" <' . self::get('email_user') . '@' . php_uname('n') . '>');
         }
 
-            // Define some variables if they aren't set by user definition in config_definitions.json
+        // Define some variables if they aren't set by user definition in config_definitions.json
+        self::set('applied_site_style', self::get('site_style'));
         self::setDefault('html_dir', '%s/html', ['install_dir']);
         self::setDefault('rrd_dir', '%s/rrd', ['install_dir']);
         self::setDefault('mib_dir', '%s/mibs', ['install_dir']);
@@ -487,6 +450,8 @@ class Config
                 }
             }
         }
+
+        self::populateTime();
     }
 
     /**

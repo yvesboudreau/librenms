@@ -74,11 +74,18 @@ class DynamicConfigItem implements \ArrayAccess
         } elseif ($this->type == 'select') {
             return in_array($value, array_keys($this->options));
         } elseif ($this->type == 'email') {
+            // allow email format that includes display text
+            if (preg_match('/.* <(.*)>/', $value, $matches)) {
+                $value = $matches[1];
+            }
+
             return filter_var($value, FILTER_VALIDATE_EMAIL);
         } elseif ($this->type == 'array') {
             return is_array($value); // this should probably have more complex validation via validator rules
+        } elseif ($this->type == 'color') {
+            return (bool)preg_match('/^#?[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$/', $value);
         } elseif (in_array($this->type, ['text', 'password'])) {
-            return true;
+            return !is_array($value);
         }
 
         return false;
@@ -186,7 +193,7 @@ class DynamicConfigItem implements \ArrayAccess
     public function getValidationMessage($value)
     {
         return $this->validate
-            ? implode(" \n", $this->buildValidator($value)->messages()->get('value'))
+            ? implode(" \n", $this->buildValidator($value)->messages()->all())
             : __('settings.validate.' . $this->type, ['id' => $this->name, 'value' => json_encode($value)]);
     }
 

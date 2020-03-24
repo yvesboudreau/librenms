@@ -54,6 +54,12 @@ systems, and use redis-sentinel.
 You should not rely on the password for the security of your
 system. See <https://redis.io/topics/security>
 
+## Memcached (distributed polling)
+
+LibreNMS still uses memcached for locking daily update processes when using
+distributed polling.  So you will still need to configure memcached
+unless you have updates disabled.
+
 ## MySQL
 
 You should already have this, but the pollers do need access to the
@@ -129,6 +135,15 @@ distributed_poller                             = true;  # Set to true to enable 
 distributed_poller_name                        = null;  # Uniquely identifies the poller instance
 distributed_poller_group                       = 0;     # Which group to poll
 ```
+### Tuning the number of workers
+
+See https://your_librenms_install/poller 
+
+You want to keep Consumed Worker Seconds comfortably below Maximum Worker Seconds. The closer the values are to each other, the flatter the CPU graph of the poller machine. Meaning that you are utilizing your CPU resources well. As long as Consumed WS stays below Maximum WS and Devices Pending is 0, you should be ok.
+
+If Consumed WS is below Maximum WS and Devices Pending is > 0, your hardware is not up to the task.
+
+Maximum WS equals the number of workers multiplied with the number of seconds in the polling period. (default 300)
 
 # Fast Ping
 
